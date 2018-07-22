@@ -6,7 +6,7 @@
 //
 //
 import Foundation
-func findFirst<S : SequenceType> (s: S, condition: (S.Generator.Element) -> Bool) -> S.Generator.Element? {
+func findFirst<S : Sequence> (_ s: S, condition: (S.Iterator.Element) -> Bool) -> S.Iterator.Element? {
   
   for value in s {
     if condition(value) {

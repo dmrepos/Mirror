@@ -30,7 +30,7 @@ extension MirrorItem : CustomStringConvertible {
 
 public struct Mirror<T> {
 
-  private let mirror: Swift.Mirror
+  fileprivate let mirror: Swift.Mirror
   let instance: T
 
   public init (_ x: T) {
@@ -42,12 +42,12 @@ public struct Mirror<T> {
 
   /// Instance type full name, include Module
   public var name: String {
-    return "\(instance.dynamicType)"
+    return "\(type(of: instance))"
   }
 
   /// Instance type short name, just a type name, without Module
   public var shortName: String {
-    let name = "\(instance.dynamicType)"
+    let name = "\(type(of: instance))"
     return name.sortNameStyle
   }
 
@@ -89,7 +89,7 @@ extension Mirror {
   }
 
   public var memorySize: Int {
-    return sizeofValue(instance)
+    return MemoryLayout.size(ofValue: instance)
   }
 }
 
@@ -136,7 +136,7 @@ extension Mirror {
 
   /// Returns a property value for a property name with a Genereci type
   /// No casting needed
-  public func get<U>(key: String) -> U? {
+  public func get<U>(_ key: String) -> U? {
     let res = findFirst(self) { $0.name == key }
     return res.flatMap { $0.value as? U }
   }
@@ -165,15 +165,19 @@ extension Mirror {
       result[item.name] = item.value as? AnyObject
     }
 
-    return result
+    return result as NSDictionary
   }
 }
 
 // MARK: - CollectionType
-extension Mirror : CollectionType, SequenceType {
+extension Mirror : Collection, Sequence {
+    public func index(after i: Int) -> Int {
+        return 1
+    }
+    
 
-  public func generate() -> IndexingGenerator<[MirrorItem]> {
-    return children.generate()
+  public func makeIterator() -> IndexingIterator<[MirrorItem]> {
+    return children.makeIterator()
   }
 
   public var startIndex: Int {
@@ -185,9 +189,9 @@ extension Mirror : CollectionType, SequenceType {
   }
 
   public subscript (i: Int) -> MirrorItem {
-    let index = mirror.children.startIndex.advancedBy(IntMax(i))
+    let index = mirror.children.index(mirror.children.startIndex, offsetBy: Int64(i))
     let child = mirror.children[index]
-    return MirrorItem(name: child.label ?? "", type: child.value.dynamicType, value: child.value)
+    return MirrorItem(name: child.label ?? "", type: type(of: (child.value) as AnyObject), value: child.value)
 //    return MirrorItem(mirror[i])
   }
 }
@@ -195,43 +199,45 @@ extension Mirror : CollectionType, SequenceType {
 // MARK: - Mirror helpers
 extension String {
 
-  func contains(x: String) -> Bool {
-    return self.rangeOfString(x) != nil
+  func contains(_ x: String) -> Bool {
+    return self.range(of: x) != nil
   }
 
   func convertOptionals() -> String {
     var x = self
-    while let start = x.rangeOfString("Optional<") {
-      if let end = x.rangeOfString(">", range: start.startIndex..<x.endIndex) {
-        let subtypeRange = start.endIndex..<end.startIndex
+    while let start = x.range(of: "Optional<") {
+      if let end = x.range(of: ">", range: start.lowerBound..<x.endIndex) {
+        let subtypeRange = start.upperBound..<end.lowerBound
         let subType = x[subtypeRange]
-        x.replaceRange(end, with: "?")
-        x.replaceRange(subtypeRange, with: subType.sortNameStyle)
+        x.replaceSubrange(end, with: "?")
+        let string = String(subType)
+        x.replaceSubrange(subtypeRange, with: string.sortNameStyle)
       }
-      x.removeRange(start)
+      x.removeSubrange(start)
     }
     return x
   }
 
   func convertArray() -> String {
     var x = self
-    while let start = x.rangeOfString("Array<") {
-      if let end = x.rangeOfString(">", range: start.startIndex..<x.endIndex) {
-        let subtypeRange = start.endIndex..<end.startIndex
+    while let start = x.range(of: "Array<") {
+      if let end = x.range(of: ">", range: start.lowerBound..<x.endIndex) {
+        let subtypeRange = start.upperBound..<end.lowerBound
         let arrayType = x[subtypeRange]
-        x.replaceRange(end, with: "]")
-        x.replaceRange(subtypeRange, with: arrayType.sortNameStyle)
+        x.replaceSubrange(end, with: "]")
+        let string = String(arrayType)
+        x.replaceSubrange(subtypeRange, with: string.sortNameStyle)
 
       }
-      x.replaceRange(start, with:"[")
+      x.replaceSubrange(start, with:"[")
     }
     return x
   }
 
   func removeTypeModuleName() -> String {
     var x = self
-    if let range = self.rangeOfString(".") {
-      x = self.substringFromIndex(range.endIndex)
+    if let range = self.range(of: ".") {
+      x = self.substring(from: range.upperBound)
     }
     return x
   }
